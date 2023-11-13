@@ -1,0 +1,349 @@
+---
+title: "Notation Check with coding"
+author: "Sohyeon Kim"
+---
+
+```{r warning = FALSE, message = FALSE}
+library(tidyverse)
+library(rebus)
+library(Matrix)
+```
+
+
+# Toy Example
+
+Suppose $y_i = (y_{i1}, y_{i2}, y_{i3})$ and $j_2\in \{1, 2, 3\}$
+
+* K = 3
+* $J = \sum_{k = 1}^3J_k = 7$
+* $S = \sum_{k < \ell}J_kJ_\ell = 16$
+* $S_0 = \sum_{k<\ell}(J_k - 1)(J_\ell - 1) = 5$
+
+
+$$
+\begin{pmatrix}y_1\\y_2\\y_3\end{pmatrix} = \begin{pmatrix}1 &3 & 2\\2 & 1 & 2\\1 & 2 & 1\end{pmatrix}
+$$
+
+```{r eval = FALSE}
+k <- 1
+```
+
+
+
+```{r Toy Example, eval = FALSE}
+K <- 3
+J <- 7
+J_k_vec <- c(2, 3, 2)
+J <- sum(J_k_vec)
+S <- combn(J_k_vec, 2) %>% apply(2, prod) %>% sum()
+S_0 <- combn(J_k_vec - 1, 2) %>% apply(2, prod) %>% sum()
+
+Y <- matrix(c(1, 3, 2, 2, 1, 2, 1, 2, 1), nrow = 3, byrow = TRUE)
+n <- nrow(Y)
+p <- 3
+
+set.seed(1)
+X <- matrix(rnorm(n*p), nrow = n)
+```
+
+
+```{r Complicated design, eval = FALSE}
+K <- 10
+J_k_vec <- c(5, 5, 5, 5, 3, 3, 3, 7, 7, 7)
+J <- sum(J_k_vec)
+S <- combn(J_k_vec, 2) %>% apply(2, prod) %>% sum()
+S_0 <- combn(J_k_vec - 1, 2) %>% apply(2, prod) %>% sum()
+
+set.seed(1)
+Y <- cbind(matrix(rdunif(20, b = 5), nrow = 5), matrix(rdunif(15, b = 3), nrow = 5), matrix(rdunif(15, b = 7), nrow = 5))
+n <- nrow(Y)
+p <- 7
+
+X <- matrix(rnorm(n*p), nrow = n)
+
+```
+
+
+
+```{r}
+make_pair_data <- function(data, K) {
+  subdata <- data.frame(matrix(ncol = 2, nrow = 0)) %>%
+  `colnames<-`(value = c("pair", "value"))
+  for(i in 1:(K-1)) {
+    for(j in (i+1):K) {
+      out1_cat <- data[, i]
+      out2_cat <- data[, j]
+      pair <- paste0("(", i, ",", j, ")")
+      pair_val <- paste0(out1_cat, ",", out2_cat)
+      subdata <- rbind(subdata, data.frame("pair" = pair, "category" = pair_val))
+    } 
+  }
+  return(subdata)
+}
+```
+
+
+
+
+# Design matrix
+
+$$
+S_k = J_k\sum_{\ell \ne k}J_\ell
+$$
+
+```{r}
+J_k <- J_k_vec[k]
+
+U_k <- matrix(0, nrow = n, ncol = J_k)
+
+for(i in 1:n) {
+  y_ik <- Y[i,k]
+  U_k[i, y_ik] <- 1
+}
+
+```
+
+```{r}
+Q_k <-rbind(matrix(0, nrow = 1, ncol = J_k - 1), diag(J_k - 1))
+
+```
+
+
+
+```{r}
+Y_list <- Y %>% as.data.frame() %>%
+  `colnames<-`(value = paste0("j_", 1:K)) %>%
+  mutate(i = 1:n) %>%
+  split(., .$i) %>%
+  lapply(FUN = function(x) x[, -ncol(x)])
+
+Y_combi_data <- Y_list %>% lapply(FUN = function(x) make_pair_data(x, K = K)) %>% 
+  bind_rows(.id = "obs") %>% mutate(w_k = 1) %>% mutate(obs = as.numeric(obs))
+
+
+out_cat_data <- data.frame(out = as.character(1:K), num_cat = J_k_vec)
+
+combi <- combn(1:K, 2)
+combi_set <- paste("(", combi[1, ], ",", combi[2, ], ")")
+combi_list <- combi_set %>% str_split(",") %>% `names<-`(value = combi_set)
+
+for(i in 1:length(combi_list)) {
+  sublist <- combi_list[[i]]
+  outcome <- str_extract_all(sublist, one_or_more(DGT)) %>% unlist
+  num_cat <- filter(out_cat_data, out %in% outcome)$"num_cat"
+  cat_set <- expand.grid(1:num_cat[2], 1:num_cat[1]) %>% `names<-`(c("cat2", "cat1")) %>% 
+    mutate(out1 = outcome[1], out2 = outcome[2], 
+           pair = paste0("(", out1, ",", out2, ")"), 
+           category = paste0(cat1, ",", cat2)) %>%
+    select(pair, category)
+  J_1 <- J_k_vec[outcome[1] %>% as.numeric]
+  J_2 <- J_k_vec[outcome[2] %>% as.numeric]
+  
+  R_1 <- matrix(0, nrow = J_2, ncol = (J_1 - 1)*(J_2 - 1))
+  R_2 <- kronecker(diag(J_1 - 1), rbind(matrix(0, nrow = 1, ncol = J_2-1), diag(J_2 - 1)), 
+                   make.dimnames = FALSE)
+  R_12 <- rbind(R_1, R_2)
+  
+  combi_list[[i]] <- list("outcome" = outcome, "num_cat" = num_cat, "combi_data" = cat_set, 
+                            "R_kl" = R_12)
+}
+
+combi_idx <-  str_detect(combi_set, pattern = or("\\( " %R% k , k %R%" \\)"))
+combi_data_k <- lapply(combi_list[combi_idx], FUN = function(x) x$combi_data) %>% bind_rows
+
+W_k <- split(Y_combi_data, Y_combi_data$obs) %>% lapply(FUN = function(x) left_join(combi_data_k, x) %>%
+                                                   mutate(psi = paste0(pair, ",", category),
+                                                          w_k = ifelse(is.na(w_k), 0, w_k)) %>%
+                                                   select(psi, w_k) %>%
+                                                   pivot_wider(names_from = psi, values_from = w_k)) %>%
+  bind_rows() %>% as.matrix()
+
+R <- lapply(combi_list, FUN = function(x) x$R_kl) %>% bdiag
+```
+
+
+
+
+
+
+```{r}
+greater_k <- (k+1):K
+if(k < K - 1){
+  zero_mat_col <- combn(J_k_vec[greater_k], 2) %>% apply(2, FUN = prod) %>% sum()
+  zero_mat <- matrix(0, nrow = J_k * sum(J_k_vec[-k]), ncol = zero_mat_col)
+} else {zero_mat <- matrix(0, nrow = J_k * sum(J_k_vec[-k]), ncol = 0)}
+
+if(k < K){
+  sub_A_k <- diag(sum(J_k_vec[greater_k])*J_k)
+  } else {
+      sub_A_k <- diag(0)
+    }
+if(k != 1) {
+  for(a in (k-1):1) {
+    if(a != k-1) {
+      submat1 <- matrix(0, nrow = J_k*J_k_vec[a], ncol = J_k_vec[a]*sum(J_k_vec[(a+1):(k-1)]))
+    } else {submat1 <- matrix(nrow = J_k*J_k_vec[a], ncol = 0)}
+    submat2 <- diag(J_k*J_k_vec[a])
+    if(k != K) {
+          submat3 <- matrix(0, nrow = J_k*J_k_vec[a], ncol = sum(J_k_vec[(k+1):K])*J_k_vec[a])
+    } else {submat3 <- matrix(nrow = J_k*J_k_vec[a], ncol = 0)}
+    submat <- cbind(submat1, submat2, submat3)
+    sub_A_k <- bdiag(submat,sub_A_k)
+  }
+}
+
+A_k <- cbind(sub_A_k, zero_mat)
+```
+
+
+condition a <= K-1 for submat3?
+
+
+
+```{r}
+alpha_k_nm <- paste0("alpha_", k, ",", 1:J_k)
+beta_k_nm <- sapply(paste0("beta_", k, ",", 1:J_k), 
+                    FUN = function(x) paste0(x, "(", 1:p, ")"), simplify = FALSE) %>% 
+  unlist() %>% `names<-`(NULL)
+combi_data <- lapply(combi_list, FUN = function(x) x$combi_data) %>% bind_rows %>%
+  mutate(comb = paste0(pair, "_", category))
+psi_nm <- combi_data$comb
+delta_nm <- sapply(psi_nm, FUN = function(x) paste0(x, "(", 1:p, ")"), simplify = FALSE) %>%
+  unlist() %>% `names<-`(NULL)
+
+set.seed(1)
+alpha_k <- rnorm(J_k)
+beta_k <- rnorm(p*J_k)
+psi <- rnorm(S)
+delta <- rnorm(S*p)
+
+alpha_k_data <- data.frame(alpha = alpha_k_nm, value = alpha_k) %>% 
+  mutate(value = ifelse(str_detect(alpha, pattern = "," %R% 1), 0, value))
+beta_k_data <- data.frame(beta = beta_k_nm, value = beta_k) %>% 
+  mutate(value = ifelse(str_detect(beta, pattern = "," %R% 1), 0, value))
+
+
+psi_data <- data.frame(psi = psi_nm, value = psi) %>%
+  mutate(value = ifelse(str_detect(psi, pattern = or("_1", ",1" %R% END)), 0, value))
+psi <- psi_data$value
+
+pattern_delta = or("_1", "1" %R% "\\(")
+delta_data <- data.frame(delta = delta_nm, value = delta) %>%
+  mutate(value = ifelse(str_detect(delta, pattern = pattern_delta), 0, value))
+
+alpha_k_tilde <- filter(alpha_k_data, value != 0) %>% .$value
+beta_k_tilde <- filter(beta_k_data, value != 0) %>% .$value
+psi_tilde <- filter(psi_data, value != 0) %>% .$value
+delta_tilde <- filter(delta_data, value != 0) %>% .$value
+```
+
+
+
+
+```{r}
+data.frame("value" = U_k %*% Q_k %*% alpha_k_tilde) %>% left_join(alpha_k_data)
+```
+
+```{r}
+W_k %*% A_k %*% R %*% psi_tilde
+```
+
+
+```{r}
+design_psi <- W_k %*% A_k %*% R
+lapply(seq_len(nrow(design_psi)), function(i) design_psi[i, ] %>% as.logical %>% which %>% filter(psi_data, value!= 0)$psi[.] )
+
+```
+
+
+
+```{r}
+t(KhatriRao(t(Q_k)%*%t(U_k), t(X))) %*% beta_k_tilde
+```
+
+
+```{r}
+t(KhatriRao(t(R) %*% t(A_k) %*% t(W_k), t(X))) %*% delta_tilde
+```
+
+# Penalty
+
+```{r}
+UQ_mat_list <- Map(list, J_k_vec) %>% lapply(FUN = function(x) `names<-`(x, "J_k"))
+
+for(k in 1:K) {
+  tmp_list <- vector("list", K)
+  for(idx in 1:K) {
+    if(k == idx) {
+      tmp_list[[idx]] <- diag(J_k_vec[idx])
+    } else {
+      tmp_list[[idx]] <- matrix(rep(1, J_k_vec[idx]), ncol = 1)
+    }
+  }
+  tmp_U_k <- reduce(tmp_list, .f = kronecker)
+  tmp_Q_k <- rbind(matrix(0, nrow = 1, ncol = J_k_vec[k] - 1), diag(J_k_vec[k] - 1))
+  UQ_mat_list[[k]] <- tmp_U_k %*% tmp_Q_k
+}
+
+W_mat_list <- combi_set %>% str_split(",") %>% `names<-`(value = combi_set) %>%
+  lapply(FUN = function(x) str_extract_all(x, one_or_more(DGT), simplify = TRUE) %>% as.numeric)
+
+for(i in 1:length(W_mat_list)) {
+  tmp_combi <- W_mat_list[[i]]
+  tmp_list <- vector("list", K) 
+  for(idx in 1:K) {
+    if (idx %in% tmp_combi) {
+      tmp_list[[idx]] <- diag(J_k_vec[idx])
+    } else {
+      tmp_list[[idx]] <- matrix(rep(1, J_k_vec[idx]), ncol = 1)
+    }
+  }
+  W_mat_list[[i]] <- reduce(tmp_list, .f = kronecker)
+}
+
+UQ_mat <- reduce(UQ_mat_list, cbind)
+WR_mat <- reduce(W_mat_list, cbind) %*% R
+
+UQWR <- cbind(UQ_mat, WR_mat)
+
+```
+
+```{r}
+beta_tilde_nm <- vector(mode = "character")
+for(k in 1:K) {
+  tmp_name <- sapply(paste0("beta_", k, ",", 1:J_k_vec[k]), 
+                    FUN = function(x) paste0(x, "(", 1:p, ")"), simplify = FALSE) %>% 
+  unlist() %>% `names<-`(NULL)
+  beta_tilde_nm <- c(beta_tilde_nm, tmp_name)
+}
+
+beta_tilde_nm <- beta_tilde_nm[!str_detect(beta_tilde_nm, pattern = "," %R% 1)]
+delta_tilde_nm <- delta_data %>% filter(value != 0) %>% .$delta
+theta_tilde_nm <- c(beta_tilde_nm, delta_tilde_nm)
+
+D <- kronecker(UQWR, diag(p))
+
+
+
+lapply(seq_len(nrow(D)), function(i) D[i, ] %>% as.logical %>% which %>% theta_tilde_nm[.])
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
