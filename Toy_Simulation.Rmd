@@ -10,11 +10,43 @@ library(rebus)
 library(Matrix)
 library(nnet)
 library(genlasso)
+library(foreach)
+library(doParallel)
+library(gglasso)
 ```
 
 
 
+```{r}
+set.seed(2)
+n <- 500
+K <- 3
+J_k_vec <- c(2, 3, 2)
+p <- 2
+
+alpha_tilde <- c(0.8, 0.7, 1, 0.6)
+psi_tilde <- c(-0.9, -0.7, -1, -0.8, -0.7)
+beta_tilde <- c(0.7, 0.8, 0, 1.1, 0.9, 0.7, 0, 1)
+delta_tilde <- c(0, -1.00, -1.30, -0.7, 0, -1.1, 0, -1.20, 0, -0.8)
+theta_tilde <- c(alpha_tilde, psi_tilde, beta_tilde, delta_tilde)
+```
+
+
 ```{r eval = FALSE}
+set.seed(2)
+n <- 1000
+K <- 3
+J_k_vec <- c(2, 3, 2)
+p <- 10
+
+alpha_tilde <- c(0.8, 0.4, 1, 0.6)
+psi_tilde <- c(-0.9, -0.7, -1, -0.8, -0.7)
+beta_tilde <- c(0.7, 0.8, rep(0, 8), 0, 1.1, rep(0, 8), 0.9, 0.7, rep(0, 8), 0, 1, rep(0, 8))
+delta_tilde <- c(0, -1.00, rep(0, 8), -1.30, -0.7, rep(0, 8), 0, -1.1, rep(0, 8), 0, -1.20, rep(0, 8), 0, -0.8, rep(0, 8))
+theta_tilde <- c(alpha_tilde, psi_tilde, beta_tilde, delta_tilde)
+```
+
+```{r group lasso coefficient setting, eval = FALSE}
 set.seed(2)
 n <- 500
 K <- 3
@@ -22,11 +54,84 @@ J_k_vec <- c(2, 3, 2)
 p <- 10
 
 alpha_tilde <- c(0.8, 0.4, 1, 0.6)
-psi_tilde <- c(-0.4, -0.2, -1, -0.8, -0.6)
-beta_tilde <- c(0.4, 0.8, rep(0, 8), 0, 1.1, rep(0, 8), 0.9, 0.7, rep(0, 8), 0, 1, rep(0, 8))
-delta_tilde <- c(0, -1.00, rep(0, 8), -1.30, -0.5, rep(0, 8), 0, -1.15, rep(0, 8), 0, -1.20, rep(0, 8), 0, -0.65, rep(0, 8))
+psi_tilde <- c(-0.9, -0.7, -1, -0.8, -0.7)
+beta_tilde <- c(0.7, 0.8, 0.0, 0.0, 0.0, 0.0, 1.1, 0.8, 0.0, 0.0,
+                0.8, 1.1, 0.0, 0.0, 0.0, 0.0, 0.7, 0.9, 0.0, 0.0,
+                0.9, 0.7, 0.0, 0.0, 0.0, 0.0, 1.2, 0.6, 0.0, 0.0,
+                0.7, 1.0, 0.0, 0.0, 0.0, 0.0, 0.9, 0.7, 0.0, 0.0)
+delta_tilde <- c(-0.8, -1.0, 0.0, 0.0, 0.0, 0.0, -1.0, -0.9, 0.0, 0.0,
+                 -1.3, -0.7, 0.0, 0.0, 0.0, 0.0, -0.8, -1.0, 0.0, 0.0,
+                 -0.7, -1.1, 0.0, 0.0, 0.0, 0.0, -0.7, -1.2, 0.0, 0.0,
+                 -0.8, -1.2, 0.0, 0.0, 0.0, 0.0, -1.1, -0.8, 0.0, 0.0,
+                 -0.9, -0.8, 0.0, 0.0, 0.0, 0.0, -0.9, -0.6, 0.0, 0.0)
 theta_tilde <- c(alpha_tilde, psi_tilde, beta_tilde, delta_tilde)
+```
 
+
+```{r group lasso coefficient setting with p is 20}
+set.seed(2)
+n <- 500
+K <- 3
+J_k_vec <- c(2, 3, 2)
+p <- 20
+
+alpha_tilde <- c(0.8, 0.4, 1, 0.6)
+psi_tilde <- c(-0.9, -0.7, -1, -0.8, -0.7)
+beta_tilde <- c(0.7, 0.8, 0.0, 0.0, 0.0, 0.0, 1.1, 0.8, 0.0, 0.0, rep(0, 10),
+                0.8, 1.1, 0.0, 0.0, 0.0, 0.0, 0.7, 0.9, 0.0, 0.0, rep(0, 10),
+                0.9, 0.7, 0.0, 0.0, 0.0, 0.0, 1.2, 0.6, 0.0, 0.0, rep(0, 10),
+                0.7, 1.0, 0.0, 0.0, 0.0, 0.0, 0.9, 0.7, 0.0, 0.0, rep(0, 10))
+delta_tilde <- c(-0.8, -1.0, 0.0, 0.0, 0.0, 0.0, -1.0, -0.9, 0.0, 0.0, rep(0, 10),
+                 -1.3, -0.7, 0.0, 0.0, 0.0, 0.0, -0.8, -1.0, 0.0, 0.0, rep(0, 10),
+                 -0.7, -1.1, 0.0, 0.0, 0.0, 0.0, -0.7, -1.2, 0.0, 0.0, rep(0, 10),
+                 -0.8, -1.2, 0.0, 0.0, 0.0, 0.0, -1.1, -0.8, 0.0, 0.0, rep(0, 10),
+                 -0.9, -0.8, 0.0, 0.0, 0.0, 0.0, -0.9, -0.6, 0.0, 0.0, rep(0, 10))
+theta_tilde <- c(alpha_tilde, psi_tilde, beta_tilde, delta_tilde)
+```
+
+
+
+```{r strong signal group lasso}
+set.seed(2)
+n <- 1000
+K <- 3
+J_k_vec <- c(2, 3, 2)
+p <- 10
+
+alpha_tilde <- c(3.8, 3.4, 4, 3.6)
+psi_tilde <- c(-3.9, -3.7, -4, -3.8, -3.7)
+beta_tilde <- c(3.7, 3.8, 0.0, 0.0, 0.0, 0.0, 4.1, 3.8, 0.0, 0.0,
+                3.8, 4.1, 0.0, 0.0, 0.0, 0.0, 3.7, 3.9, 0.0, 0.0,
+                3.9, 3.7, 0.0, 0.0, 0.0, 0.0, 4.2, 3.6, 0.0, 0.0,
+                3.7, 4.0, 0.0, 0.0, 0.0, 0.0, 3.9, 3.7, 0.0, 0.0)
+delta_tilde <- c(-3.8, -4.0, 0.0, 0.0, 0.0, 0.0, -4.0, -3.9, 0.0, 0.0,
+                 -4.3, -3.7, 0.0, 0.0, 0.0, 0.0, -3.8, -4.0, 0.0, 0.0,
+                 -3.7, -4.1, 0.0, 0.0, 0.0, 0.0, -3.7, -4.2, 0.0, 0.0,
+                 -3.8, -4.2, 0.0, 0.0, 0.0, 0.0, -4.1, -3.8, 0.0, 0.0,
+                 -3.9, -3.8, 0.0, 0.0, 0.0, 0.0, -3.9, -3.6, 0.0, 0.0)
+theta_tilde <- c(alpha_tilde, psi_tilde, beta_tilde, delta_tilde)
+```
+
+
+
+```{r eval = FALSE}
+set.seed(2)
+n <- 1000
+K <- 3
+J_k_vec <- c(2, 3, 2)
+p <- 20
+
+alpha_tilde <- c(0.8, 0.4, 1, 0.6)
+psi_tilde <- c(-0.9, -0.7, -1, -0.8, -0.7)
+beta_tilde <- c(0.7, 0.8, rep(0, 18), 0, 1.1, rep(0, 18), 0.9, 0.7, rep(0, 18), 0, 1, rep(0, 18))
+delta_tilde <- c(0, -1.00, rep(0, 18), -1.30, -0.7, rep(0, 18), 0, -1.1, rep(0, 18), 0, -1.20, rep(0, 18), 0, -0.8, rep(0, 18))
+theta_tilde <- c(alpha_tilde, psi_tilde, beta_tilde, delta_tilde)
+```
+
+
+# Generate data
+
+```{r}
 combi <- combn(1:K, 2)
 combi_set <- paste("(", combi[1, ], ",", combi[2, ], ")")
 combi_list <- combi_set %>% str_split(",") %>% `names<-`(value = combi_set)
@@ -187,7 +292,7 @@ generate_mml <- function(J_k_vec, theta_tilde, X, R) {
 set.seed(2)
 J_k_vec <- c(2, 3, 2)
 
-simul_times <- 300
+simul_times <- 100
 Y_list <- vector(mode = "list", length = simul_times)
 X_list <- vector(mode = "list", length = simul_times)
 for(simul in 1:simul_times) {
@@ -243,77 +348,6 @@ make_pair_data <- function(data, K) {
 }
 ```
 
-
-
-
-
-
-```{r Prev calc_design code}
-calc_design_mat <- function(Data, J_k_vec, X) {
-  n <- nrow(Data); K <- length(J_k_vec); p <- ncol(X);
-
-  # Design matrix for intercept
-  U.k_list <- Map(list, J_k_vec) %>% lapply(FUN = function(x) `names<-`(x, "J_k"))
-  
-  for(k in 1:K) {
-    J_k <- J_k_vec[k]
-    U_k <- matrix(0, nrow = n, ncol = J_k)
-
-    for(i in 1:n) {
-      y_ik <- Data[i,k]
-      U_k[i, y_ik] <- 1
-    }
-    
-    U.k_list[[k]] <- U_k
-  }
-  
-  
-  # Design matrix for coefficient of X
-  Y_list <- Data %>% as.data.frame() %>%
-    `colnames<-`(value = paste0("j_", 1:K)) %>%
-    mutate(i = 1:n) %>%
-    split(., .$i) %>%
-    lapply(FUN = function(x) x[, -ncol(x)])
-
-  Y_combi_data <- Y_list %>% lapply(FUN = function(x) make_pair_data(x, K = K)) %>% 
-    bind_rows(.id = "obs") %>% mutate(w_k = 1) %>% mutate(obs = as.numeric(obs))
-
-
-  W.k_list <- Map(list, J_k_vec) %>% lapply(FUN = function(x) `names<-`(x, "J_k"))
-  out_cat_data <- data.frame(out = as.character(1:K), num_cat = J_k_vec)
-  combi <- combn(1:K, 2)
-  combi_set <- paste("(", combi[1, ], ",", combi[2, ], ")")
-  combi_list <- combi_set %>% str_split(",") %>% `names<-`(value = combi_set)
-  for(i in 1:length(combi_list)) {
-    sublist <- combi_list[[i]]
-    outcome <- str_extract_all(sublist, one_or_more(DGT)) %>% unlist
-    num_cat <- filter(out_cat_data, out %in% outcome)$"num_cat"
-    cat_set <- expand.grid(1:num_cat[2], 1:num_cat[1]) %>% `names<-`(c("cat2", "cat1")) %>% 
-      mutate(out1 = outcome[1], out2 = outcome[2], 
-             pair = paste0("(", out1, ",", out2, ")"), 
-             category = paste0(cat1, ",", cat2)) %>%
-      select(pair, category)
-    combi_list[[i]] <- cat_set
-  }
-  for(k in 1:K) {
-    J_k <- J_k_vec[k]
-    combi_idx <-  str_detect(combi_set, pattern = or("\\( " %R% k , k %R%" \\)"))
-    combi_data_k <- combi_list %>% bind_rows %>% filter(str_detect(pair, pattern = or("(" %R% k, k %R% ")")))
-    W_k <- split(Y_combi_data, Y_combi_data$obs) %>% lapply(FUN = function(x) left_join(combi_data_k, x, by = c("category", "pair")) %>%
-                                                              mutate(psi = paste0(pair, ",", category),
-                                                              w_k = ifelse(is.na(w_k), 0, w_k)) %>%
-                                                              select(psi, w_k) %>%
-                                                              pivot_wider(names_from = psi, values_from = w_k)) %>%
-      bind_rows() %>% as.matrix()
-  
-    
-    W.k_list[[k]] <- W_k 
-  }
-  
-  out <- list(U.k = U.k_list, W.k = W.k_list)
-  return(out)
-}
-```
 
 
 ```{r}
@@ -480,6 +514,47 @@ for(simul in 1:simul_times) {
 ```
 
 
+
+```{r}
+Z_tilde_list_0 <- vector(mode = "list", length = simul_times)
+Z_tilde_list_0_sub <- Z_list_0[[simul]]
+
+for(simul in 1:simul_times) {
+  Y <- Y_list[[simul]]
+  o.ik_list <- lapply(seq_len(ncol(Y)), FUN = function(i) Y[, i] %>% as.numeric %>% data.frame("cat" = .)) 
+  y.ik_list <- vector(mode = "list", length = K)
+  for(k in 1:K) {
+    y.ik <-  matrix(0, nrow = n, ncol = J_k_vec[k])
+    for(i in 1:n) {
+      y.ik[i, o.ik_list[[k]][i,]] <- 1 
+    }
+    y.ik_list[[k]] <- y.ik
+  }
+  denom_Z_list_init <- lapply(Z_list_0[[simul]], FUN = function(x) apply(x, MARGIN = 1, FUN = function(y) sum(exp(y), 1)))
+  
+  for(k in 1:K) {
+      if(J_k_vec[k] == 2) {
+      L_k <- -1/4
+      } else if(J_k_vec[k] == 3) {
+        L_k <- -1/2
+      } else {L_k <- -1}
+      for(j in 1:(J_k_vec[k] - 1)) {
+        for(i in 1:n) {
+          Z_tilde_list_0_sub[[k]][i, j] <- Z_list_0[[simul]][[k]][i, j] - 
+            (1/L_k)*(y.ik_list[[k]][i,(j+1)] - 
+                       exp(Z_list_0[[simul]][[k]][i, j])/denom_Z_list_init[[k]][i])
+        }
+      }
+  }
+  Z_tilde_list_0[[simul]] <- Z_tilde_list_0_sub
+  
+}
+
+
+```
+
+
+
 ```{r}
 X_tilde_stack_list <- vector(mode = "list", length = simul_times)
 
@@ -518,33 +593,12 @@ for(simul in 1:simul_times){
 }
 ```
 
-
-
-
-```{r Penalty}
-
-
-# Penalty
-S_0 <- combn(J_k_vec - 1, 2) %>% apply(2, prod) %>% sum()
-J_k_list <- Map(list, J_k_vec) %>% lapply(FUN = function(x) unlist(x))
-
-poss_WR_mat <- gen_mml$poss_W_mat %*% R
-D <- cbind(gen_mml$poss_UQ_mat, poss_WR_mat) %>%
-  kronecker(., diag(p)) %>%
-  cbind(matrix(0, nrow = prod(J_k_vec)*p, ncol = (sum(J_k_vec - 1) + S_0)), .) %>% 
-  .[-(1:p), ]
-```
-
-
-
-
-
-
-```{r}
-est_mml <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lamb_seq) {
+```{r group lasso penatly}
+est_mml <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lamb_seq, p) {
   #Setting
   n <- nrow(Y); K <- ncol(Y);
   J_k_vec <- Y %>% apply(2, unique) %>% lapply(FUN = function(x) x %>% length) %>% unlist
+  J_0 <- sum(J_k_vec - 1); S_0 <- (ncol(X_tilde_stack) - J_0*(p+1))/(p+1);
   
   colidx_list <- vector(mode = "list", length = K)
   colidx_sum <- 1
@@ -569,6 +623,17 @@ est_mml <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lamb_s
   err_list <- vector(mode = "list", length = length(lamb_seq))
   cond_likel_list <- vector(mode = "list", length = length(lamb_seq))
   
+  # Initial coef for adaptive lasso
+  Z_tilde_init_stack <- unlist(Z_tilde_list_0)
+  data_init <- cbind(Z_tilde_init_stack, X_tilde_stack) %>%
+                              `colnames<-`(value = c("Z_tilde", paste0("param", 1:ncol(X_tilde_stack)))) %>% 
+                              data.frame()
+  fit_lm_init <- lm(Z_tilde ~. - 1, data = data_init)
+  init_coef <- coef(fit_lm_init)
+  init_coef <- ifelse(abs(init_coef) < 0.1^5, 0.001, init_coef)
+  weight <- rep(1, length(init_coef))#/abs(init_coef)
+  weight[1:(J_0 + S_0)] <- 0
+  
   for(lamb_idx in 1:length(lamb_seq)) {
     #Initial value
     Z_list_new <- Z_list_0; Z_tilde_list_new <- Z_tilde_list_0;
@@ -586,15 +651,28 @@ est_mml <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lamb_s
     data_tmp <- cbind(Z_tilde_prev_stack, X_tilde_stack) %>%
                               `colnames<-`(value = c("Z_tilde", paste0("param", 1:ncol(X_tilde_stack)))) %>% 
                               data.frame()
-      #fit_lm <- lm(Z_tilde ~ . - 1, data = data_tmp)
-      #coef <- coef(fit_lm)
-    fit <- glmnet::glmnet(x = data_tmp[, -1], y = data_tmp$Z_tilde, penalty.factor = c(rep(0, 9), rep(1, 90)), 
-                                                              lambda = lamb_seq[lamb_idx], intercept = FALSE)
     
-    #fit_genlasso <- genlasso(data_tmp$Z_tilde, X = X_tilde_stack, D = as.matrix(D))
-    #m <- nrow(X_tilde_stack); k <- ncol(X_tilde_stack);
-    #BIC_vec <- sapply(summary(fit_genlasso)[, "rss"], FUN = function(rss) m*log(rss/m) + k*log(m)) 
-    coef_set <- rbind(coef_set, fit$beta[, 1])
+    # group lasso
+    group <- c(rep(1, J_0 + S_0), rep(1:p, J_0 + S_0) + 1)
+    #group <- c(rep(1, J_0 + S_0), rep(1:p, J_0) + 1, rep((p+1):(2*p), S_0) + 1)
+    pf <- c(0, rep(sqrt(J_0 + S_0), p))
+    #pf <- c(0, rep(sqrt(J_0), p), rep(sqrt(S_0), p))
+    
+    group_org <- sort(group)
+    X_unorg <- data_tmp[, -1] %>% as.matrix()
+    X_org <- c()
+    for(g in 1:max(group)) {
+      X_org <- cbind(X_org, X_unorg[, (group == g)])
+    }
+    fit <- gglasso(x = X_org, y = data_tmp$Z_tilde, group = group_org, pf = pf, loss = "ls", 
+                   lambda = lamb_seq[lamb_idx], intercept = FALSE)
+    
+    est_coef <- fit$beta[, 1]
+    est_coef_org <- c()
+    for(idx in 1:length(group)) {
+      est_coef_org <- c(est_coef_org, est_coef[order(group) == idx])
+    }
+    coef_set <- rbind(coef_set, est_coef_org)
 
     #Update Z
     #Z_mat_new <- fit_lm$fitted.values %>% matrix(byrow = FALSE, nrow = n)
@@ -645,6 +723,249 @@ est_mml <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lamb_s
 
 
 
+```{r adaptive lasso penatly}
+est_mml_ad_lasso <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lamb_seq, p) {
+  #Setting
+  n <- nrow(Y); K <- ncol(Y);
+  J_k_vec <- Y %>% apply(2, unique) %>% lapply(FUN = function(x) x %>% length) %>% unlist
+  J_0 <- sum(J_k_vec - 1); S_0 <- (ncol(X_tilde_stack) - J_0*(p+1))/(p+1);
+  
+  colidx_list <- vector(mode = "list", length = K)
+  colidx_sum <- 1
+  for(k in 1:K) {
+    colidx_list[[k]] <- (colidx_sum):(colidx_sum + (J_k_vec[k] - 2))
+    colidx_sum <- colidx_sum + J_k_vec[k] - 1
+  }
+  o.ik_list <- lapply(seq_len(ncol(Y)), FUN = function(i) Y[, i] %>% as.numeric %>% data.frame("cat" = .)) 
+  y.ik_list <- vector(mode = "list", length = K)
+  for(k in 1:K) {
+    y.ik <-  matrix(0, nrow = n, ncol = J_k_vec[k])
+    for(i in 1:n) {
+      y.ik[i, o.ik_list[[k]][i,]] <- 1 
+    }
+    y.ik_list[[k]] <- y.ik
+  }
+  obs_idx_list <- lapply(seq(1, K), FUN = function(k) Y[, k])
+
+  #Initial setting
+  coef_list <- vector(mode = "list", length = length(lamb_seq))
+  BIC_set <- vector(mode = "numeric", length = length(lamb_seq))
+  err_list <- vector(mode = "list", length = length(lamb_seq))
+  cond_likel_list <- vector(mode = "list", length = length(lamb_seq))
+  
+  # Initial coef for adaptive lasso
+  Z_tilde_init_stack <- unlist(Z_tilde_list_0)
+  data_init <- cbind(Z_tilde_init_stack, X_tilde_stack) %>%
+                              `colnames<-`(value = c("Z_tilde", paste0("param", 1:ncol(X_tilde_stack)))) %>% 
+                              data.frame()
+  fit_lm_init <- lm(Z_tilde ~. - 1, data = data_init)
+  init_coef <- coef(fit_lm_init)
+  init_coef <- ifelse(abs(init_coef) < 0.1^5, 0.001, init_coef)
+  weight <- rep(1, length(init_coef))#/abs(init_coef)
+  weight[1:(J_0 + S_0)] <- 0
+  
+  for(lamb_idx in 1:length(lamb_seq)) {
+    #Initial value
+    Z_list_new <- Z_list_0; Z_tilde_list_new <- Z_tilde_list_0;
+    coef_set <- vector(mode = "numeric", length = ncol(X_tilde_stack))
+    cond_likel_set <- NULL
+    err_set <- c()
+  for(iter in 1:max_iter) {
+    
+    #replace updated values
+    Z_list_prev <- Z_list_new
+    Z_tilde_list_prev <- Z_tilde_list_new
+  
+    #fitting linear regression
+    Z_tilde_prev_stack <- Z_tilde_list_prev %>% unlist() 
+    data_tmp <- cbind(Z_tilde_prev_stack, X_tilde_stack) %>%
+                              `colnames<-`(value = c("Z_tilde", paste0("param", 1:ncol(X_tilde_stack)))) %>% 
+                              data.frame()
+    # Adaptive lasso 
+    fit <- glmnet::glmnet(x = data_tmp[, -1], y = data_tmp$Z_tilde, 
+                          penalty.factor = weight, 
+                          lambda = lamb_seq[lamb_idx], intercept = FALSE)
+
+    coef_set <- rbind(coef_set, fit$beta[, 1])
+
+    #Update Z
+    Z_mat_new <- X_tilde_stack %*% t(tail(coef_set, 1)) %>% matrix(byrow = FALSE, nrow = n)
+    Z_list_new <- lapply(colidx_list, FUN = function(idx) Z_mat_new[, idx] %>% matrix(byrow = FALSE, nrow = n))
+    
+    #Update Z tilde
+    denom_Z_new_list <- lapply(Z_list_new, FUN = function(x) apply(x, MARGIN = 1, FUN = function(y) sum(exp(y), 1)))
+    
+    for(k in 1:K) {
+      if(J_k_vec[k] == 2) {
+      L_k <- -1/4
+      } else if(J_k_vec[k] == 3) {
+        L_k <- -1/2
+      } else {L_k <- -1}
+      for(j in 1:(J_k_vec[k] - 1)) {
+        for(i in 1:n) {
+          Z_tilde_list_new[[k]][i, j] <- Z_list_new[[k]][i, j] - 
+            (1/L_k)*(y.ik_list[[k]][i,(j+1)] - 
+                       exp(Z_list_new[[k]][i, j])/denom_Z_new_list[[k]][i])
+        }
+      }
+    }
+    
+    cond_likel <- calc_cond_likel(Z_list = Z_list_new, obs_idx_list = obs_idx_list)
+    cond_likel_set <- c(cond_likel_set, cond_likel)
+    err <- tail(coef_set, 2) %>% apply(MARGIN = 2, diff) %>% abs %>% max
+    err_set <- c(err_set, err)
+    
+    if(abs(err) < 0.1^3) break;
+  }
+    coef_list[[lamb_idx]] <- coef_set %>% `rownames<-`(paste0("iter", 0:iter))
+    err_list[[lamb_idx]] <- err_set
+    
+    cond_likel_list[[lamb_idx]] <- cond_likel_set
+    BIC_penalty <- fit$df*log(n)
+  BIC <- -2*tail(cond_likel_set, 1) + BIC_penalty
+  BIC_set[lamb_idx] <- BIC
+    
+  }
+  
+  # Output
+  out <- list(coef = coef_list, err = err_list, BIC = BIC_set, cond_likel = cond_likel_list)
+  return(out)
+}
+```
+
+
+```{r linear regression ( no penalty )}
+est_mml_lm <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, p) {
+  #Setting
+  n <- nrow(Y); K <- ncol(Y);
+  J_k_vec <- Y %>% apply(2, unique) %>% lapply(FUN = function(x) x %>% length) %>% unlist
+  J_0 <- sum(J_k_vec - 1); S_0 <- (ncol(X_tilde_stack) - J_0*(p+1))/(p+1);
+  
+  colidx_list <- vector(mode = "list", length = K)
+  colidx_sum <- 1
+  for(k in 1:K) {
+    colidx_list[[k]] <- (colidx_sum):(colidx_sum + (J_k_vec[k] - 2))
+    colidx_sum <- colidx_sum + J_k_vec[k] - 1
+  }
+  o.ik_list <- lapply(seq_len(ncol(Y)), FUN = function(i) Y[, i] %>% as.numeric %>% data.frame("cat" = .)) 
+  y.ik_list <- vector(mode = "list", length = K)
+  for(k in 1:K) {
+    y.ik <-  matrix(0, nrow = n, ncol = J_k_vec[k])
+    for(i in 1:n) {
+      y.ik[i, o.ik_list[[k]][i,]] <- 1 
+    }
+    y.ik_list[[k]] <- y.ik
+  }
+  obs_idx_list <- lapply(seq(1, K), FUN = function(k) Y[, k])
+
+  #Initial value
+  Z_list_new <- Z_list_0; Z_tilde_list_new <- Z_tilde_list_0;
+  coef_set <- vector(mode = "numeric", length = ncol(X_tilde_stack))
+  cond_likel_set <- NULL
+  err_set <- c()
+  
+  for(iter in 1:max_iter) {
+    
+    #replace updated values
+    Z_list_prev <- Z_list_new
+    Z_tilde_list_prev <- Z_tilde_list_new
+  
+    #fitting linear regression
+    Z_tilde_prev_stack <- Z_tilde_list_prev %>% unlist() 
+    data_tmp <- cbind(Z_tilde_prev_stack, X_tilde_stack) %>%
+                              `colnames<-`(value = c("Z_tilde", paste0("param", 1:ncol(X_tilde_stack)))) %>% 
+                              data.frame()
+    fit_lm <- lm(Z_tilde ~ . - 1, data = data_tmp)
+    coef <- coef(fit_lm)
+    coef_set <- rbind(coef_set, coef)
+    
+    #Update Z
+    Z_mat_new <- fit_lm$fitted.values %>% matrix(byrow = FALSE, nrow = n)
+    Z_list_new <- lapply(colidx_list, FUN = function(idx) Z_mat_new[, idx] %>% matrix(byrow = FALSE, nrow = n))
+    
+    #Update Z tilde
+    denom_Z_new_list <- lapply(Z_list_new, FUN = function(x) apply(x, MARGIN = 1, FUN = function(y) sum(exp(y), 1)))
+    
+    for(k in 1:K) {
+      if(J_k_vec[k] == 2) {
+      L_k <- -1/4
+      } else if(J_k_vec[k] == 3) {
+        L_k <- -1/2
+      } else {L_k <- -1}
+      for(j in 1:(J_k_vec[k] - 1)) {
+        for(i in 1:n) {
+          Z_tilde_list_new[[k]][i, j] <- Z_list_new[[k]][i, j] - 
+            (1/L_k)*(y.ik_list[[k]][i,(j+1)] - 
+                       exp(Z_list_new[[k]][i, j])/denom_Z_new_list[[k]][i])
+        }
+      }
+    }
+    
+    cond_likel <- calc_cond_likel(Z_list = Z_list_new, obs_idx_list = obs_idx_list)
+    cond_likel_set <- c(cond_likel_set, cond_likel)
+    err <- tail(coef_set, 2) %>% apply(MARGIN = 2, diff) %>% abs %>% max
+    err_set <- c(err_set, err)
+    
+    if(abs(err) < 0.1^3) break;
+  }
+  
+    #Initial value
+    Z_list_new <- Z_list_0; Z_tilde_list_new <- Z_tilde_list_0;
+    coef_set <- vector(mode = "numeric", length = ncol(X_tilde_stack))
+    cond_likel_set <- NULL
+    err_set <- c()
+  for(iter in 1:max_iter) {
+    
+    #replace updated values
+    Z_list_prev <- Z_list_new
+    Z_tilde_list_prev <- Z_tilde_list_new
+  
+    #fitting linear regression
+    Z_tilde_prev_stack <- Z_tilde_list_prev %>% unlist() 
+    data_tmp <- cbind(Z_tilde_prev_stack, X_tilde_stack) %>%
+                              `colnames<-`(value = c("Z_tilde", paste0("param", 1:ncol(X_tilde_stack)))) %>% 
+                              data.frame()
+    fit_lm <- lm(Z_tilde ~ . - 1, data = data_tmp)
+    coef <- coef(fit_lm)
+    coef_set <- rbind(coef_set, coef)
+
+    #Update Z
+    Z_mat_new <- fit_lm$fitted.values %>% matrix(byrow = FALSE, nrow = n)
+    Z_list_new <- lapply(colidx_list, FUN = function(idx) Z_mat_new[, idx] %>% matrix(byrow = FALSE, nrow = n))
+    
+    #Update Z tilde
+    denom_Z_new_list <- lapply(Z_list_new, FUN = function(x) apply(x, MARGIN = 1, FUN = function(y) sum(exp(y), 1)))
+    
+    for(k in 1:K) {
+      if(J_k_vec[k] == 2) {
+      L_k <- -1/4
+      } else if(J_k_vec[k] == 3) {
+        L_k <- -1/2
+      } else {L_k <- -1}
+      for(j in 1:(J_k_vec[k] - 1)) {
+        for(i in 1:n) {
+          Z_tilde_list_new[[k]][i, j] <- Z_list_new[[k]][i, j] - 
+            (1/L_k)*(y.ik_list[[k]][i,(j+1)] - 
+                       exp(Z_list_new[[k]][i, j])/denom_Z_new_list[[k]][i])
+        }
+      }
+    }
+    
+    cond_likel <- calc_cond_likel(Z_list = Z_list_new, obs_idx_list = obs_idx_list)
+    cond_likel_set <- c(cond_likel_set, cond_likel)
+    err <- tail(coef_set, 2) %>% apply(MARGIN = 2, diff) %>% abs %>% max
+    err_set <- c(err_set, err)
+    
+    if(abs(err) < 0.1^3) break;
+  }
+
+  
+  # Output
+  out <- list(coef = coef_set, err = err_set, cond_likel = cond_likel_set)
+  return(out)
+}
+```
+
 
 
 ```{r}
@@ -661,19 +982,107 @@ calc_cond_likel <- function(Z_list, obs_idx_list) {
 ```
 
 
-```{r}
-lamb_seq <- seq(from = -9.3, to = -0.9, length.out = 100) %>% exp()
+```{r group lasso}
+lamb_seq <- seq(from = -4.9, to = -1.87, length.out = 100) %>% exp()
 lamb_seq <- c(0, lamb_seq)
 simul_output <- vector(mode = "list", length = simul_times)
 max_iter <- 300
 for(simul in 1:simul_times) {
-  output <- est_mml(max_iter = max_iter, Z_list_0 = Z_list_0[[simul]], Z_tilde_list_0 = Z_list_0[[simul]], 
-                    X_tilde_stack = X_tilde_stack_list[[simul]], Y = Y_list[[simul]], lamb_seq = lamb_seq)
+  output <- est_mml(max_iter = max_iter, Z_list_0 = Z_list_0[[simul]], Z_tilde_list_0 = Z_tilde_list_0[[simul]], 
+                    X_tilde_stack = X_tilde_stack_list[[simul]], Y = Y_list[[simul]], lamb_seq = lamb_seq, p = p)
   simul_output[[simul]] <- output
   
   if ((simul %% 50) == 0) {print(simul)}
 }
 ```
+
+
+```{r adaptive lasso}
+lamb_seq <- seq(from = -4.5, to = -1.8, length.out = 100) %>% exp()
+lamb_seq <- c(0, lamb_seq)
+simul_output <- vector(mode = "list", length = simul_times)
+max_iter <- 300
+for(simul in 1:simul_times) {
+  output <- est_mml_ad_lasso(max_iter = max_iter, Z_list_0 = Z_list_0[[simul]], Z_tilde_list_0 = Z_tilde_list_0[[simul]], 
+                    X_tilde_stack = X_tilde_stack_list[[simul]], Y = Y_list[[simul]], lamb_seq = lamb_seq, p = p)
+  simul_output[[simul]] <- output
+  
+  if ((simul %% 50) == 0) {print(simul)}
+}
+```
+
+
+```{r check solution path, warning=FALSE}
+
+group <- c(rep(1, 4 + 5), rep(1:p, 4+5) + 1)
+
+
+
+
+est_coef <- lapply(simul_output[[1]]$coef, FUN = function(coef_mat) coef_mat %>% tail(1))
+
+Perc_mat <- matrix(NA, nrow = length(est_coef), max(group))
+
+for(lamb_idx in 1:length(est_coef)) {
+  tmp_coef <- est_coef[[lamb_idx]]
+  Perc_set <- c()
+  for(g in 1:max(group)) {
+    tmp_coef_g <- tmp_coef[group == g]
+    idx_g <- ifelse(abs(tmp_coef_g) < 0.1^5, 0, 1)
+    Perc_set <- c(Perc_set, any(idx_g) %>% as.numeric())
+  }
+ Perc_mat[lamb_idx, ] <- Perc_set
+}
+
+```
+
+
+```{r linear regression}
+simul_output <- vector(mode = "list", length = simul_times)
+max_iter <- 300
+for(simul in 1:simul_times) {
+  output <- est_mml_lm(max_iter = max_iter, Z_list_0 = Z_list_0[[simul]], Z_tilde_list_0 = Z_tilde_list_0[[simul]], 
+                    X_tilde_stack = X_tilde_stack_list[[simul]], Y = Y_list[[simul]], p = p)
+  simul_output[[simul]] <- output
+  
+  if ((simul %% 50) == 0) {print(simul)}
+}
+
+
+(lapply(simul_output, FUN = function(simul) simul$coef %>% tail(1) %>% data.frame()) %>% bind_rows %>%
+  apply(MARGIN = 2, FUN = mean) - theta_tilde) %>% abs %>% max
+
+```
+
+
+```{r}
+lamb_seq <- seq(from = -4.9, to = -1.87, length.out = 100) %>% exp()
+lamb_seq <- c(0, lamb_seq)
+simul_output <- vector(mode = "list", length = simul_times)
+max_iter <- 300
+
+#Parallel Computing
+num_cores <- detectCores()
+
+cl <- makeCluster(num_cores - 1) #not to overload your computer
+registerDoParallel(cl) # Ready to parallel
+simul_output <- foreach(simul = 1:simul_times) %dopar% {
+  library(tidyverse)
+  library(glmnet)
+  library(gglasso)
+  
+ output <- est_mml(max_iter = max_iter, Z_list_0 = Z_list_0[[simul]], Z_tilde_list_0 = Z_tilde_list_0[[simul]], 
+                    X_tilde_stack = X_tilde_stack_list[[simul]], Y = Y_list[[simul]], lamb_seq = lamb_seq, p = p)
+ output
+  
+}
+stopCluster(cl)
+
+wd_path <- getwd()
+file_nm <- paste0("/simul_result/", today() %>% str_replace_all("-", "_"), "_", "n", n, "_p", p, ".RData")
+save.image(file = paste0(wd_path, file_nm))
+```
+
 
 
 
@@ -684,28 +1093,13 @@ a <- simul_output %>% lapply(FUN = function(x) x$coef[[1]] %>% tail(1) %>% data.
 
 
 
-
-```{r}
-BIC_idx <- simul_output[1:9] %>% lapply(FUN = function(simul) simul$BIC %>% which.min())
-
-mapply(FUN = function(simul, idx) simul$cond_likel[[idx]], simul = simul_output[1:9], idx = BIC_idx) %>%
-  lapply(FUN = function(cond_likel) data.frame(iter = 1:length(cond_likel), cond_likel = cond_likel)) %>%
-  bind_rows(.id = "simul") %>% 
-  mutate(simul = paste("simul = ", simul)) %>%
-  ggplot() +
-  geom_line(aes(x = iter, y = cond_likel)) +
-  facet_wrap(~simul, scales = "free")
-
-
-```
-
-
-```{r}
+```{r Solution Path for First Simulation}
 lapply(simul_output[[1]]$coef, FUN = function(coef) tail(coef, 1) %>% data.frame) %>% bind_rows() %>%
-  `colnames<-`(value = paste("param", 1:27)) %>%
+  `colnames<-`(value = paste("param", 1:ncol(X_tilde_stack_list[[1]]))) %>%
   mutate(lambda = lamb_seq) %>%
   pivot_longer(cols = -lambda, names_to = "theta") %>%
   filter(!(theta %in% paste("param", 1:9))) %>% 
+  filter(lambda < 7.5) %>% 
   ggplot() +
   geom_line(aes(x = lambda, y = value, group = theta, color = theta)) +
   ggtitle(label = "Solution Path for First Simulation") +
@@ -724,16 +1118,92 @@ est_coef <- mapply(FUN = function(coef_list, lm_idx) coef_list[[lm_idx]],
 
 est_theta <- est_coef %>% apply(2, FUN = mean)
 
-(est_theta - theta_tilde)^2 %>% sum() %>% sqrt()
+#(est_theta - theta_tilde)^2 %>% sum() %>% sqrt() %>% round(3)
 
 
 MSE_vec <- apply(est_coef, MARGIN = 1, FUN = function(est_theta) (est_theta - theta_tilde)^2 %>% mean)
-mean(MSE_vec)
+mean(MSE_vec) %>% round(3)
+sd(MSE_vec) %>% round(2)
 ```
 
 
 
 ### BIC without lambda = 0
+
+```{r group lasso same group}
+J_0 <- sum(J_k_vec - 1); S_0 <- (ncol(X_tilde_stack) - J_0*(p+1))/(p+1);
+
+group <- c(rep(1, J_0 + S_0), rep(1:p, J_0 + S_0) + 1)
+pf <- c(0, rep(sqrt(J_0 + S_0), p))
+
+
+BIC_idx <- vector(mode = "list", length = simul_times)
+for(simul in 1:simul_times) {
+  obj <- simul_output[[simul]]
+  cond_likel_set <- obj$cond_likel %>% lapply(FUN = function(x) tail(x, 1)) %>% .[-1] %>% unlist
+  beta_ls <- obj$coef[[1]] %>% tail(1)
+
+  df_set <- c()
+
+  for(lamb_idx in 1:100) {
+    coef <- obj$coef[[lamb_idx + 1]] %>% tail(1)
+    df <- 1
+  
+    for(g in 2:max(group)) {
+      theta_j <- coef[group == g]
+      ls_j <- beta_ls[group == g]
+      theta_j_norm <- sqrt(theta_j %*% theta_j)
+      ls_j_norm <- sqrt(ls_j %*% ls_j)
+      if(theta_j_norm > 0) {
+        df <- df + 1 +  theta_j_norm * ((pf[g])^2 - 1)/ls_j_norm
+      }
+    }
+    df_set <- c(df_set, df)
+  }
+  BIC_set <- -2*cond_likel_set + log(n)*df
+  BIC_idx[[simul]] <- which.min(BIC_set) + 1
+}
+
+```
+
+
+```{r group lasso separate group}
+J_0 <- sum(J_k_vec - 1); S_0 <- (ncol(X_tilde_stack) - J_0*(p+1))/(p+1);
+group <- c(rep(1, J_0 + S_0), rep(1:p, J_0) + 1, rep((p+1):(2*p), S_0) + 1)
+pf <- c(0, rep(sqrt(J_0), p), rep(sqrt(S_0), p))
+
+
+BIC_idx <- vector(mode = "list", length = simul_times)
+for(simul in 1:simul_times) {
+  obj <- simul_output[[simul]]
+  cond_likel_set <- obj$cond_likel %>% lapply(FUN = function(x) tail(x, 1)) %>% .[-1] %>% unlist
+  beta_ls <- obj$coef[[1]] %>% tail(1)
+
+  df_set <- c()
+
+  for(lamb_idx in 1:100) {
+    coef <- obj$coef[[lamb_idx + 1]] %>% tail(1)
+    df <- 1
+  
+    for(g in 2:max(group)) {
+      theta_j <- coef[group == g]
+      ls_j <- beta_ls[group == g]
+      theta_j_norm <- sqrt(theta_j %*% theta_j)
+      ls_j_norm <- sqrt(ls_j %*% ls_j)
+      if(theta_j_norm > 0) {
+        df <- df + 1 +  theta_j_norm * ((pf[g])^2 - 1)/ls_j_norm
+      }
+    }
+    df_set <- c(df_set, df)
+  }
+  BIC_set <- -2*cond_likel_set + log(n)*df
+  BIC_idx[[simul]] <- which.min(BIC_set) + 1
+}
+
+
+```
+
+
 
 ```{r}
 BIC_idx <- simul_output %>% lapply(FUN = function(simul) simul$BIC[-1] %>% which.min) %>%
@@ -745,11 +1215,12 @@ est_coef <- mapply(FUN = function(coef_list, BIC_idx) coef_list[[BIC_idx]],
 
 est_theta <- est_coef %>% apply(2, FUN = mean)
 
-(est_theta - theta_tilde)^2 %>% sum() %>% sqrt()
+#(est_theta - theta_tilde)^2 %>% sum() %>% sqrt() %>% round(3)
 
 
 MSE_vec <- apply(est_coef, MARGIN = 1, FUN = function(est_theta) (est_theta - theta_tilde)^2 %>% mean)
-mean(MSE_vec)
+mean(MSE_vec) %>% round(3)
+sd(MSE_vec) %>% round(2)
 ```
 
 ### Change -2 in BIC into ratio of loglikelihood
@@ -778,12 +1249,16 @@ est_coef <- mapply(FUN = function(coef_list, BIC_idx) coef_list[[BIC_idx]],
 
 est_theta <- est_coef %>% apply(2, FUN = mean)
 
-(est_theta - theta_tilde)^2 %>% sum() %>% sqrt()
+#(est_theta - theta_tilde)^2 %>% sum() %>% sqrt()
 
 MSE_vec <- apply(est_coef, MARGIN = 1, FUN = function(est_theta) (est_theta - theta_tilde)^2 %>% mean)
-
+mean(MSE_vec) %>% round(3)
+sd(MSE_vec) %>% round(2)
 
 ```
+
+
+
 
 ### AIC
 
@@ -804,181 +1279,105 @@ est_coef <- mapply(FUN = function(coef_list, BIC_idx) coef_list[[BIC_idx]],
 
 est_theta <- est_coef %>% apply(2, FUN = mean)
 
-(est_theta - theta_tilde)^2 %>% sum() %>% sqrt()
+#(est_theta - theta_tilde)^2 %>% sum() %>% sqrt()
 
 MSE_vec <- apply(est_coef, MARGIN = 1, FUN = function(est_theta) (est_theta - theta_tilde)^2 %>% mean)
-
+mean(MSE_vec) %>% round(3)
+sd(MSE_vec) %>% round(2)
 ```
 
-
+# TPR and TNR
 
 ```{r}
 zero_idx <- which(theta_tilde == 0)
 nz_idx <- which(theta_tilde != 0)
+J_0 <- sum(J_k_vec - 1); S_0 <- (ncol(X_tilde_stack_list[[1]]) - J_0*(p+1))/(p+1);
 
 coef_zero_vec <- est_coef %>% mutate_all(.funs = function(coef) ifelse(abs(coef) < 0.1^5, 1,0)) %>%
   `rownames<-`(NULL)
 
 Corr_0  <- coef_zero_vec %>% .[, zero_idx] %>%
-  apply(MARGIN = 1, FUN = function(vec) sum(vec == 1)) %>% mean
+  apply(MARGIN = 1, FUN = function(vec) sum(vec == 1)) 
+
+TNR <- (Corr_0/length(zero_idx))
   
 Incorr_0 <- coef_zero_vec %>% .[, nz_idx] %>%
-  apply(MARGIN = 1, FUN = function(vec) sum(vec == 1)) %>% mean()
+  apply(MARGIN = 1, FUN = function(vec) sum(vec == 1))
+
+TPR <- 1 - Incorr_0/(length(nz_idx))
    
 Freq_selec <- coef_zero_vec %>% mutate_all(.funs = function(coef) ifelse(coef == 0, 1,0)) %>%
   apply(MARGIN = 2, FUN = mean)
+c(mean(TNR), mean(TPR)) %>% round(3)
+c(sd(TNR), sd(TPR)) %>% round(2)
 ```
 
 
-```{r}
-SD <- est_coef %>% apply(2, FUN = sd)
+```{r the number of factors}
+zero_vec <- est_coef %>% mutate_all(.funs = function(x) ifelse(abs(x) < 0.1^5, 0, 1)) %>%
+  apply(MARGIN = 1, FUN = function(x) sum(x)) 
 
-data.frame(param = paste("param", 1:99), theta = theta_tilde, estimator = est_theta) %>%
-  mutate(bias = theta - estimator, SD = SD, Freq.selec = Freq_selec) %>%
-  `rownames<-`(NULL) %>% xtable::xtable()
-```
-
-
-
-```{r}
-lamb_seq[unlist(AIC_idx)] %>% hist(breaks = 100, main = "Histogram of selected lambda")
-
-l#amb_seq[unlist(BIC_idx)] %>% log() %>%  hist(breaks = 100, main = "Histogram of selected log(lambda)")
-
-```
-
-
-
-```{r}
-zero_idx <- which(theta_tilde == 0)
-
-
-(est_coef[, zero_idx] %>% mutate_all(.funs = function(coef) ifelse(abs(coef) < 0.1^5, "zero", "non-zero")) %>%
-  apply(MARGIN = 1, FUN = function(zero_vec) all(zero_vec == "zero"))) %>% mean()
-
-
-est_coef[, zero_idx] %>% mutate_all(.funs = function(coef) ifelse(abs(coef) < 0.1^5, "zero", "non-zero")) %>%
-  apply(MARGIN = 2, FUN = function(zero_vec) (zero_vec == "zero") %>% mean) %>% round(3)
-```
-
-
-```{r}
-nz_idx <- which(theta_tilde !=0)
-
-(est_coef[, nz_idx] %>% mutate_all(.funs = function(coef) ifelse(abs(coef) < 0.1^5, "zero", "non-zero")) %>% .[, -(1:9)] %>%
-  apply(MARGIN = 1, FUN = function(zero_vec) all(zero_vec == "non-zero"))) %>% mean()
-
-est_coef[, nz_idx] %>% mutate_all(.funs = function(coef) ifelse(abs(coef) < 0.1^5, "zero", "non-zero")) %>% .[, -(1:9)] %>%
-  apply(MARGIN = 2, FUN = function(zero_vec) (zero_vec == "non-zero") %>% mean) %>% round(3)
-```
-
-
-
-```{r}
-num_iter <- est_coef %>% rownames %>% str_extract(pattern = "iter" %R% one_or_more(DGT)) %>% parse_number()
-hist(num_iter, breaks = 10, main = "The number of the iteration of BIC estimator")
-
-```
-
-```{r}
-simul_max_iter <- simul_output %>% lapply(FUN = function(simul) lapply(simul$coef, FUN = function(x) nrow(x) - 1) %>% unlist %>%
-                          max()) %>% unlist() 
-
-idx_iter_300 <- which(simul_max_iter == 300)
-```
-
-
-
-```{r}
-simul_output %>% lapply(FUN = function(x) x$coef %>% nrow) %>% unlist %>% hist(breaks = 20, main = "Histogram of the number of iteration", freq = FALSE)
-```
-
-```{r}
-ex_vec <- rep(0, 26)
-simul_output %>% lapply(FUN = function(x) x$cond_likel) %>% lapply(FUN = function(vec) replace(NA*ex_vec, seq(from = 1, to = length(vec)), vec) %>%
-                                                                     matrix(nrow = 1) %>% data.frame()) %>% bind_rows %>%
-  apply(2, FUN = function(x) mean(x, na.rm = TRUE)) %>%  plot(type = "b", main = "The conditional likelihood averaged across simulations.")
-```
-
-```{r}
-simul_output %>% lapply(FUN = function(x) x$Z_tilde[[3]]) %>% unlist() %>% hist(breaks = 50, main = "Histogram of Z tilde given k = 3")
+mean(zero_vec)
+sd(zero_vec) %>% round(2)
 ```
 
 
 
 
+# Check Adaptive Lasso
+
 ```{r}
-est$coef %>% data.frame %>% 
-  `rownames<-`(NULL) %>% mutate(iter = 1:(iter+1)) %>%
-  pivot_longer(!iter, names_to = "params", values_to = "value") %>%
-  #filter(str_detect(params, "beta")) %>% 
+set.seed(1)
+x = matrix(rnorm(100 * 20), 100, 20)
+y = rnorm(100)
+
+lm <- lm(y~x - 1)
+beta_init <- coef(lm)
+weight <- 1/abs(beta_init)
+sum_w <- sum(weight)
+weight_rescale <- weight/mean(weight)
+beta_rescale <- (1/weight_rescale)*sign(beta_init)
+
+x.col_list <- lapply(1:ncol(x), FUN = function(idx) x[, idx]) 
+
+X_tilde <- mapply(FUN = function(x.col, beta) x.col*beta, x.col = x.col_list, beta = as.list(abs(beta_init)), SIMPLIFY = FALSE) %>% bind_cols
+X_tilde_rescale <- mapply(FUN = function(x.col, beta) x.col*beta, x.col = x.col_list, beta = as.list(abs(beta_rescale)), SIMPLIFY = FALSE) %>% bind_cols
+
+err.set <- c()
+lamb_seq <- seq(0.0001, 2.5, length.out = 1000)
+for(idx in 1:length(lamb_seq)) {
+  fit1 <- glmnet::glmnet(x, y, alpha = 1, lambda = lamb_seq[idx], intercept = FALSE, penalty.factor = 1/abs(beta_init))
+beta <- coef(fit1)[-1]
+
+
+fit2 <- glmnet::glmnet(X_tilde_rescale, y, alpha = 1, lambda = lamb_seq[idx], intercept = FALSE)
+theta <- coef(fit2)[-1]
+beta2 <- abs(beta_rescale)*theta
+err <- (beta - beta2)^2 %>% sum %>% sqrt
+err.set <- c(err.set, err)
+}
+
+data.frame(lambda = lamb_seq, diff = err.set) %>%
   ggplot() +
-  geom_line(aes(x = iter, y = value, group = params, color = params))
-```
+  geom_line(aes(x = lambda, y = diff)) +
+  geom_point(aes(x = lambda, y = diff))
 
-```{r}
-coef_set %>% data.frame %>% `colnames<-`(theta_tilde_nm) %>%
-  `rownames<-`(NULL) %>% mutate(iter = 1:(iter+1)) %>%
-  pivot_longer(!iter, names_to = "params", values_to = "value") %>%
-  filter(str_detect(params, pattern = "alpha")) %>%
-  ggplot() +
-  geom_line(aes(x = iter, y = value, group = params, color = params)) +
-  facet_wrap(~params, scales = "free_y")
-```
+fit1 <- glmnet::glmnet(x, y, alpha = 1, lambda = 0.1, intercept = FALSE, penalty.factor = 1/abs(beta_init))
+beta1 <- coef(fit1)[-1]
+fit2 <- glmnet::glmnet(x, y, alpha = 1, lambda = 0.1, intercept = FALSE, penalty.factor = (1/abs(beta_init))/mean(weight))
+beta2 <- coef(fit2)[-1]
 
-```{r}
-coef_set %>% data.frame %>% `colnames<-`(theta_tilde_nm) %>%
-  `rownames<-`(NULL) %>% mutate(iter = 1:iter) %>%
-  pivot_longer(!iter, names_to = "params", values_to = "value") %>%
-  filter(!str_detect(params, "beta") & str_detect(params, "\\)" %R% END)) %>% 
-  ggplot() +
-  geom_line(aes(x = iter, y = value, group = params, color = params)) +
-  facet_wrap(~params)
-```
+fit3 <- glmnet::glmnet(X_tilde, y, alpha = 1, lambda = 0.05, intercept = FALSE)
+theta <- coef(fit3)[-1]
+beta3 <- abs(beta_init)*theta
+fit4 <- glmnet::glmnet(X_tilde_rescale, y, alpha = 1, lambda = 0.1/mean(weight), intercept = FALSE)
+theta_rescale <- coef(fit4)[-1]
+beta4 <- abs(beta_rescale)*theta_rescale
 
-```{r}
-coef_set %>% data.frame %>% `colnames<-`(theta_tilde_nm) %>%
-  `rownames<-`(NULL) %>% mutate(iter = 1:iter) %>%
-  pivot_longer(!iter, names_to = "params", values_to = "value") %>%
-  filter(!str_detect(params, or("beta", "alpha") ) & !str_detect(params, "\\)" %R% END)) %>% 
-  ggplot() +
-  geom_line(aes(x = iter, y = value, group = params, color = params))
+
 ```
 
 
 
 
-```{r}
-pred_combi <- Z_list_new %>% lapply(FUN = function(Z_k) apply(Z_k, MARGIN = 1, which.max)) %>%
-  bind_cols() %>% `names<-`(value = paste0("y", 1:K)) %>%
-  unite(col = "combi", sep = ",") %>% .$combi
-
-obs_combi <- Y %>% unite(col = "combi", sep = ",") %>% .$combi
-
-(pred_combi == obs_combi) %>% sum
-```
-
-
-```{r}
-est_Z <- mapply(FUN = function(Z, idx) Z[cbind(seq_len(n), idx)], Z = Z_list_new, idx = obs_idx_list)
-
-theta <- c(alpha_tilde, psi_tilde, beta_tilde, delta_tilde)
-true_Z <- (X_tilde %*% theta) %>% matrix(nrow = n, byrow = FALSE)
-
-Matrix::norm(est_Z - true_Z, type = "F")
-```
-
-```{r}
-x = data_tmp[, -1]
-y = data_tmp$Z_tilde
-fit1 = glmnet(x, y, lambda = 0, intercept = FALSE)
-fit2 <- lm(Z_tilde ~ . - 1, data = data_tmp)
-
-coef_fit1 <- as.vector(coef(fit1))[-1]
-coef_fit2 <- coef(fit2)
-
-(coef_fit1 - coef_fit2) %>% abs %>% max
-
-(as.vector(coef(fit1)) - coef(fit2)) %>% abs %>% max
-```
 
