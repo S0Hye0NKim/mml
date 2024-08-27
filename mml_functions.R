@@ -135,14 +135,13 @@ est_mml <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lamb_s
   weight <- rep(1, length(init_coef))#/abs(init_coef)
   weight[1:(J_0 + S_0)] <- 0
   
-  for(lamb_idx in 1:length(lamb_seq)) {
+  for(lamb_idx in 0:length(lamb_seq)) {
     #Initial value
     Z_list_new <- Z_list_0; Z_tilde_list_new <- Z_tilde_list_0;
     coef_set <- vector(mode = "numeric", length = ncol(X_tilde_stack))
     cond_likel_set <- NULL
     err_set <- c()
     for(iter in 1:max_iter) {
-      
       #replace updated values
       Z_list_prev <- Z_list_new
       Z_tilde_list_prev <- Z_tilde_list_new
@@ -153,27 +152,31 @@ est_mml <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lamb_s
         `colnames<-`(value = c("Z_tilde", paste0("param", 1:ncol(X_tilde_stack)))) %>% 
         data.frame()
       
-      # group lasso
-      group <- c(rep(1, J_0 + S_0), rep(1:p, J_0 + S_0) + 1)
-      #group <- c(rep(1, J_0 + S_0), rep(1:p, J_0) + 1, rep((p+1):(2*p), S_0) + 1)
-      pf <- c(0, rep(sqrt(J_0 + S_0), p))
-      #pf <- c(0, rep(sqrt(J_0), p), rep(sqrt(S_0), p))
-      
-      group_org <- sort(group)
-      X_unorg <- data_tmp[, -1] %>% as.matrix()
-      X_org <- c()
-      for(g in 1:max(group)) {
-        X_org <- cbind(X_org, X_unorg[, (group == g)])
+      # Fit group lasso or linear regression
+      if(lamb_idx == 0) {
+        fit <- lm(Z_tilde ~ . - 1, data = data_tmp)
+        est_coef <- coef(fit)
+      } else{
+        group <- c(rep(1, J_0 + S_0), rep(1:p, J_0 + S_0) + 1)
+        #group <- c(rep(1, J_0 + S_0), rep(1:p, J_0) + 1, rep((p+1):(2*p), S_0) + 1)
+        pf <- c(0, rep(sqrt(J_0 + S_0), p))
+        #pf <- c(0, rep(sqrt(J_0), p), rep(sqrt(S_0), p))
+        
+        group_org <- sort(group)
+        X_unorg <- data_tmp[, -1] %>% as.matrix()
+        X_org <- c()
+        for(g in 1:max(group)) {
+          X_org <- cbind(X_org, X_unorg[, (group == g)])
+        }
+        fit <- gglasso(x = X_org, y = data_tmp$Z_tilde, group = group_org, pf = pf, loss = "ls", 
+                       lambda = lamb_seq[lamb_idx], intercept = FALSE)
+        est_coef_prev <- fit$beta[, 1]
+        est_coef <- c()
+        for(idx in 1:length(group)) {
+          est_coef <- c(est_coef, est_coef_prev[order(group) == idx])
+        }
       }
-      fit <- gglasso(x = X_org, y = data_tmp$Z_tilde, group = group_org, pf = pf, loss = "ls", 
-                     lambda = lamb_seq[lamb_idx], intercept = FALSE)
-      
-      est_coef <- fit$beta[, 1]
-      est_coef_org <- c()
-      for(idx in 1:length(group)) {
-        est_coef_org <- c(est_coef_org, est_coef[order(group) == idx])
-      }
-      coef_set <- rbind(coef_set, est_coef_org)
+      coef_set <- rbind(coef_set, est_coef)
       
       #Update Z
       #Z_mat_new <- fit_lm$fitted.values %>% matrix(byrow = FALSE, nrow = n)
@@ -205,18 +208,17 @@ est_mml <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lamb_s
       
       if(abs(err) < 0.1^3) break;
     }
-    coef_list[[lamb_idx]] <- coef_set %>% `rownames<-`(paste0("iter", 0:iter))
-    err_list[[lamb_idx]] <- err_set
-    
-    cond_likel_list[[lamb_idx]] <- cond_likel_set
-    BIC_penalty <- fit$df*log(n)
-    BIC <- -2*tail(cond_likel_set, 1) + BIC_penalty
-    BIC_set[lamb_idx] <- BIC
-    
+    if(lamb_idx == 0) {
+      coef_ls <- coef_set %>% `rownames<-`(paste0("iter", 0:iter))
+    } else {
+      coef_list[[lamb_idx]] <- coef_set %>% `rownames<-`(paste0("iter", 0:iter))
+      err_list[[lamb_idx]] <- err_set
+      cond_likel_list[[lamb_idx]] <- cond_likel_set
+    }
   }
   
   # Output
-  out <- list(coef = coef_list, err = err_list, BIC = BIC_set, cond_likel = cond_likel_list)
+  out <- list(coef_ls = coef_ls, coef = coef_list, err = err_list, cond_likel = cond_likel_list)
   return(out)
 }
 
