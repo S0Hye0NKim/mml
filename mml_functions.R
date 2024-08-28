@@ -234,4 +234,24 @@ calc_cond_likel <- function(Z_list, obs_idx_list) {
   return(cond_likel)
 }
 
+# Calculate degree of freedom in group lasso
+cal_df_gglasso <- function(beta, beta_ls, group) {
+  p_j <- table(group) %>% as.vector()
+  
+  beta_l2 <- c()
+  beta_ls_l2 <- c()
+  for(g in 1:max(group)) {
+    beta_j <- beta[group == g]
+    beta_j_l2 <- beta_j^2 %>% sum %>% sqrt
+    beta_l2 <- c(beta_l2, beta_j_l2)
+    
+    beta_ls_j <- beta_ls[group == g]
+    beta_ls_j_l2 <- beta_ls_j^2 %>% sum %>% sqrt
+    beta_ls_l2 <- c(beta_ls_l2, beta_ls_j_l2)
+  }
+  
+  out <- sum(beta_l2 > 0) + sum(beta_l2/beta_ls_l2*(p_j - 1))
+  
+  return(out)
+}
 
