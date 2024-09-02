@@ -210,6 +210,7 @@ est_mml <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lamb_s
     }
     if(lamb_idx == 0) {
       coef_ls <- coef_set %>% `rownames<-`(paste0("iter", 0:iter))
+      ls_cond_likel <- calc_cond_likel(Z_list = Z_list_new, obs_idx_list = obs_idx_list)
     } else {
       coef_list[[lamb_idx]] <- coef_set %>% `rownames<-`(paste0("iter", 0:iter))
       err_list[[lamb_idx]] <- err_set
@@ -218,7 +219,7 @@ est_mml <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lamb_s
   }
   
   # Output
-  out <- list(coef_ls = coef_ls, coef = coef_list, err = err_list, cond_likel = cond_likel_list)
+  out <- list(coef_ls = coef_ls, ls_cond_likel = ls_cond_likel, coef = coef_list, err = err_list, cond_likel = cond_likel_list)
   return(out)
 }
 
