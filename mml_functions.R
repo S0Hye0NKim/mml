@@ -95,7 +95,7 @@ calc_design_mat <- function(Data, U.k_ref, W.k_ref) {
 
 
 # Estimate the coefficient vector using mm algorithm (with group lasso)
-est_mml <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lamb_seq, p) {
+est_mml <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lamb_seq, p, adaptive = FALSE) {
   #Setting
   n <- nrow(Y); K <- ncol(Y);
   J_k_vec <- Y %>% apply(2, unique) %>% lapply(FUN = function(x) x %>% length) %>% unlist
@@ -132,8 +132,18 @@ est_mml <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lamb_s
   fit_lm_init <- lm(Z_tilde ~. - 1, data = data_init)
   init_coef <- coef(fit_lm_init)
   init_coef <- ifelse(abs(init_coef) < 0.1^5, 0.001, init_coef)
-  weight <- rep(1, length(init_coef))#/abs(init_coef)
-  weight[1:(J_0 + S_0)] <- 0
+  
+  group <- c(rep(1, J_0 + S_0), rep(1:p, J_0 + S_0) + 1)
+  if(adaptive == FALSE) {
+    weight <- table(group) %>% as.vector() %>% sqrt
+    weight[1] <- 0
+  } else {
+    weight <- rep(0, max(group))
+    for(g in 2:max(group)) {
+      init_coef_g <- init_coef[group == g]
+      weight[g] <- 1/(init_coef_g^2 %>% sum %>% sqrt)
+    }
+  }
   
   for(lamb_idx in 0:length(lamb_seq)) {
     #Initial value
@@ -157,18 +167,13 @@ est_mml <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lamb_s
         fit <- lm(Z_tilde ~ . - 1, data = data_tmp)
         est_coef <- coef(fit)
       } else{
-        group <- c(rep(1, J_0 + S_0), rep(1:p, J_0 + S_0) + 1)
-        #group <- c(rep(1, J_0 + S_0), rep(1:p, J_0) + 1, rep((p+1):(2*p), S_0) + 1)
-        pf <- c(0, rep(sqrt(J_0 + S_0), p))
-        #pf <- c(0, rep(sqrt(J_0), p), rep(sqrt(S_0), p))
-        
         group_org <- sort(group)
         X_unorg <- data_tmp[, -1] %>% as.matrix()
         X_org <- c()
         for(g in 1:max(group)) {
           X_org <- cbind(X_org, X_unorg[, (group == g)])
         }
-        fit <- gglasso(x = X_org, y = data_tmp$Z_tilde, group = group_org, pf = pf, loss = "ls", 
+        fit <- gglasso(x = X_org, y = data_tmp$Z_tilde, group = group_org, pf = weight, loss = "ls", 
                        lambda = lamb_seq[lamb_idx], intercept = FALSE)
         est_coef_prev <- fit$beta[, 1]
         est_coef <- c()
@@ -179,7 +184,6 @@ est_mml <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lamb_s
       coef_set <- rbind(coef_set, est_coef)
       
       #Update Z
-      #Z_mat_new <- fit_lm$fitted.values %>% matrix(byrow = FALSE, nrow = n)
       Z_mat_new <- X_tilde_stack %*% t(tail(coef_set, 1)) %>% matrix(byrow = FALSE, nrow = n)
       Z_list_new <- lapply(colidx_list, FUN = function(idx) Z_mat_new[, idx] %>% matrix(byrow = FALSE, nrow = n))
       
