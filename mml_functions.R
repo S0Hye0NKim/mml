@@ -233,3 +233,120 @@ cal_df_gglasso <- function(beta, beta_ls, group) {
   return(out)
 }
 
+# Estimate the coefficient vector using mm algorithm (with gBridge)
+est_mml_gBridge <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lamb_seq, p) {
+  #Setting
+  n <- nrow(Y); K <- ncol(Y);
+  J_k_vec <- Y %>% apply(2, unique) %>% lapply(FUN = function(x) x %>% length) %>% unlist
+  J_0 <- sum(J_k_vec - 1); S_0 <- (ncol(X_tilde_stack) - J_0*(p+1))/(p+1);
+  
+  colidx_list <- vector(mode = "list", length = K)
+  colidx_sum <- 1
+  for(k in 1:K) {
+    colidx_list[[k]] <- (colidx_sum):(colidx_sum + (J_k_vec[k] - 2))
+    colidx_sum <- colidx_sum + J_k_vec[k] - 1
+  }
+  o.ik_list <- lapply(seq_len(ncol(Y)), FUN = function(i) Y[, i] %>% as.numeric %>% data.frame("cat" = .)) 
+  y.ik_list <- vector(mode = "list", length = K)
+  for(k in 1:K) {
+    y.ik <-  matrix(0, nrow = n, ncol = J_k_vec[k])
+    for(i in 1:n) {
+      y.ik[i, o.ik_list[[k]][i,]] <- 1 
+    }
+    y.ik_list[[k]] <- y.ik
+  }
+  obs_idx_list <- lapply(seq(1, K), FUN = function(k) Y[, k])
+  
+  #Initial setting
+  coef_list <- vector(mode = "list", length = length(lamb_seq))
+  BIC_set <- vector(mode = "numeric", length = length(lamb_seq))
+  err_list <- vector(mode = "list", length = length(lamb_seq))
+  cond_likel_list <- vector(mode = "list", length = length(lamb_seq))
+  group <- c(rep(1, J_0 + S_0), rep(1:p, J_0 + S_0) + 1)
+  group_mult <- table(group) %>% as.vector()
+  group_mult[1] <- 0
+  
+  for(lamb_idx in 0:length(lamb_seq)) {
+    #Initial value
+    Z_list_new <- Z_list_0; Z_tilde_list_new <- Z_tilde_list_0;
+    coef_set <- vector(mode = "numeric", length = ncol(X_tilde_stack))
+    cond_likel_set <- NULL
+    err_set <- c()
+    for(iter in 1:max_iter) {
+      #replace updated values
+      Z_list_prev <- Z_list_new
+      Z_tilde_list_prev <- Z_tilde_list_new
+      
+      # Minimization
+      Z_tilde_prev_stack <- Z_tilde_list_prev %>% unlist() 
+      data_tmp <- cbind(Z_tilde_prev_stack, X_tilde_stack) %>%
+        `colnames<-`(value = c("Z_tilde", paste0("param", 1:ncol(X_tilde_stack)))) %>% 
+        data.frame()
+      
+      # Fit group lasso or linear regression
+      if(lamb_idx == 0) {
+        fit <- lm(Z_tilde ~ . - 1, data = data_tmp)
+        est_coef <- coef(fit)
+      } else{
+        group_org <- sort(group)
+        X_unorg <- data_tmp[, -1] %>% as.matrix()
+        X_org <- c()
+        for(g in 1:max(group)) {
+          X_org <- cbind(X_org, X_unorg[, (group == g)])
+        }
+        centered_response <- data_tmp$Z_tilde %>% scale(center = TRUE, scale = FALSE)
+        colwise_centered_X_org <- apply(X_org, MARGIN = 2, FUN = scale, center = TRUE, scale = FALSE)
+        fit <- gBridge(X = colwise_centered_X_org, y = centered_response, lambda = lamb_seq[lamb_idx], 
+                       group = group_org, group.multiplier = group_mult, family = "gaussian") 
+        est_coef_prev <- fit$beta[-1, 1]
+        est_coef <- c()
+        for(idx in 1:length(group)) {
+          est_coef <- c(est_coef, est_coef_prev[order(group) == idx])
+        }
+      }
+      coef_set <- rbind(coef_set, est_coef)
+      
+      #Update Z
+      Z_mat_new <- X_tilde_stack %*% t(tail(coef_set, 1)) %>% matrix(byrow = FALSE, nrow = n)
+      Z_list_new <- lapply(colidx_list, FUN = function(idx) Z_mat_new[, idx] %>% matrix(byrow = FALSE, nrow = n))
+      
+      #Update Z tilde
+      denom_Z_new_list <- lapply(Z_list_new, FUN = function(x) apply(x, MARGIN = 1, FUN = function(y) sum(exp(y), 1)))
+      
+      for(k in 1:K) {
+        if(J_k_vec[k] == 2) {
+          L_k <- -1/4
+        } else if(J_k_vec[k] == 3) {
+          L_k <- -1/2
+        } else {L_k <- -1}
+        for(j in 1:(J_k_vec[k] - 1)) {
+          for(i in 1:n) {
+            Z_tilde_list_new[[k]][i, j] <- Z_list_new[[k]][i, j] - 
+              (1/L_k)*(y.ik_list[[k]][i,(j+1)] - 
+                         exp(Z_list_new[[k]][i, j])/denom_Z_new_list[[k]][i])
+          }
+        }
+      }
+      
+      cond_likel <- calc_cond_likel(Z_list = Z_list_new, obs_idx_list = obs_idx_list)
+      cond_likel_set <- c(cond_likel_set, cond_likel)
+      err <- tail(coef_set, 2) %>% apply(MARGIN = 2, diff) %>% abs %>% max
+      err_set <- c(err_set, err)
+      
+      if(abs(err) < 0.1^3) break;
+    }
+    if(lamb_idx == 0) {
+      coef_ls <- coef_set %>% `rownames<-`(paste0("iter", 0:iter))
+      ls_cond_likel <- calc_cond_likel(Z_list = Z_list_new, obs_idx_list = obs_idx_list)
+    } else {
+      coef_list[[lamb_idx]] <- coef_set %>% `rownames<-`(paste0("iter", 0:iter))
+      err_list[[lamb_idx]] <- err_set
+      cond_likel_list[[lamb_idx]] <- cond_likel_set
+    }
+  }
+  
+  # Output
+  out <- list(coef_ls = coef_ls, ls_cond_likel = ls_cond_likel, coef = coef_list, err = err_list, cond_likel = cond_likel_list)
+  return(out)
+}
+
