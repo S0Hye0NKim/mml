@@ -83,8 +83,8 @@ calc_design_mat <- function(Data, U.k_ref, W.k_ref) {
   U.k_list <- vector(mode = "list", length = K)
   W.k_list <- vector(mode = "list", length = K)
   for(k in 1:K) {
-    sub_U.k <- Combi %>% left_join(poss_U_mat_list[[k]], by = "combi") %>% select(-combi)
-    sub_W.k <- Combi %>% left_join(poss_W_mat_list[[k]], by = "combi") %>% select(-combi)
+    sub_U.k <- Combi %>% left_join(poss_U_mat_list[[k]], by = "combi") %>% dplyr::select(-combi)
+    sub_W.k <- Combi %>% left_join(poss_W_mat_list[[k]], by = "combi") %>% dplyr::select(-combi)
     
     U.k_list[[k]] <- sub_U.k %>% as.matrix()
     W.k_list[[k]] <- sub_W.k %>% as.matrix()
