@@ -356,32 +356,29 @@ cal_df_gBridge <- function(beta, lambda, group, X, gamma = 0.5, J_0, S_0) {
   group_mult <- table(group) %>% as.vector() %>% sqrt
   group_mult[1] <- 0
   
-  theta_vec <- c()
+  simple_mult <- c()
   for(g in 1:max(group)) {
     beta_g <- beta[group == g]
     beta_g_norm <- (abs(beta_g) %>% sum)^gamma
-    theta_g <- group_mult[g] * ((1-gamma)/(tau * gamma))^gamma * beta_g_norm
-    theta_vec <- c(theta_vec, theta_g)
+    beta_g_norm <- ifelse(beta_g_norm == 0, NA, beta_g_norm)
+    simple_mult_g <- group_mult[g] * ((1-gamma)/(tau * gamma))^(gamma - 1) * (beta_g_norm)^(gamma - 1)
+    simple_mult <- c(simple_mult, simple_mult_g)
   }
+  
   idx_nz_beta <- which(abs(beta) > 0.1^5)
-  X_lambda <- X[, idx_nz_beta] %>% .[, -(1:(J_0 + S_0))]
+  X_lambda <- X[, idx_nz_beta]
   
   diag_element <- c()
-  for(idx_p in 1:ncol(X)) {
+  for(idx_p in idx_nz_beta) {
     beta_p <- beta[idx_p]
     belong_group <- group[idx_p]
-    if(abs(beta_p) > 0.1^5) {
-      tmp_val <- theta_vec[belong_group]^(1-1/gamma) * group_mult[belong_group]^(1/gamma)/abs(beta_p) %>% as.numeric
-      tmp_val <- ifelse(belong_group == 1, 0, tmp_val)
-    } else {tmp_val <- 0}
-    diag_element <- c(diag_element, tmp_val)
+    diag_element_p <- simple_mult[belong_group]/abs(beta_p)
+    diag_element <- c(diag_element, diag_element_p)
   }
-  diag_element <- diag_element[which(diag_element != 0)]
   W_lambda <- diag(diag_element)
   
-  df <- ifelse(ncol(W_lambda)!= 0, 
-               (X_lambda %*% solve(t(X_lambda) %*% X_lambda + 0.5 * W_lambda) %*% t(X_lambda)) %>% diag %>% sum, 
-               NA)
+  df_mat <- (X_lambda %*% solve(t(X_lambda) %*% X_lambda + 0.5 * W_lambda) %*% t(X_lambda))
+  df <- df_mat %>% diag %>% sum
   return(df)
 }
 
