@@ -234,7 +234,7 @@ cal_df_gglasso <- function(beta, beta_ls, group) {
 }
 
 # Estimate the coefficient vector using mm algorithm (with gBridge)
-est_mml_gBridge <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lamb_seq, p) {
+est_mml_gBridge <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lamb_seq, p, group, group_mult) {
   #Setting
   n <- nrow(Y); K <- ncol(Y);
   J_k_vec <- Y %>% apply(2, unique) %>% lapply(FUN = function(x) x %>% length) %>% unlist
@@ -262,10 +262,13 @@ est_mml_gBridge <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y
   BIC_set <- vector(mode = "numeric", length = length(lamb_seq))
   err_list <- vector(mode = "list", length = length(lamb_seq))
   cond_likel_list <- vector(mode = "list", length = length(lamb_seq))
-  group <- c(rep(1, J_0 + S_0), rep(1:p, J_0 + S_0) + 1)
-  group_mult <- table(group) %>% as.vector() %>% sqrt()
-  group_mult[1] <- 0
-  
+  if(missing(group)) {
+    group <- c(rep(1, J_0 + S_0), rep(1:p, J_0 + S_0) + 1)
+  }
+  if(missing(group_mult)) {
+    group_mult <- table(group) %>% as.vector() %>% sqrt()
+    group_mult[1] <- 0
+  }
   for(lamb_idx in 0:length(lamb_seq)) {
     #Initial value
     Z_list_new <- Z_list_0; Z_tilde_list_new <- Z_tilde_list_0;
