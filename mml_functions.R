@@ -297,11 +297,28 @@ est_mml_gBridge <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y
         for(g in 1:max(group)) {
           X_org <- cbind(X_org, X_unorg[, (group == g)])
         }
-        centered_response <- data_tmp$Z_tilde %>% scale(center = TRUE, scale = FALSE)
-        colwise_centered_X_org <- apply(X_org, MARGIN = 2, FUN = scale, center = TRUE, scale = FALSE)
-        fit <- gBridge(X = colwise_centered_X_org, y = centered_response, lambda = lamb_seq[lamb_idx], 
-                       group = group_org, group.multiplier = group_mult, family = "gaussian") 
-        est_coef_prev <- fit$beta[-1, 1]
+        
+        A <- X_org[, 1:J_0]
+        centered_A <- scale(A, center = TRUE, scale = FALSE)
+        svd_centered_A <- svd(centered_A)
+        
+        data_tmp2 <- data.frame(Z_tilde = data_tmp$Z_tilde) %>% 
+          bind_cols(svd_centered_A$u[, 1:(ncol(A) - 1)] %>% `colnames<-`(paste0("new_param", 1:(J_0-1)))) %>%
+          bind_cols(X_org[, (J_0 + 1):ncol(X_org)])
+        
+        fit <- gBridge(X = data_tmp2[, -1], y = data_tmp2$Z_tilde, lambda = lamb_seq[lamb_idx], 
+                       group = group_org[-1], # Because of reparametrization
+                       group.multiplier = group_mult, family = "gaussian") 
+        est_alpha <- fit$beta[1:J_0]
+        
+        solve_A <- apply(A, MARGIN = 2, FUN = mean)
+        for(i in 1:(ncol(A)-1)) {
+          solve_A_row <- svd_centered_A$d[i]*t(svd_centered_A$v[, i])
+          solve_A <- rbind(solve_A, solve_A_row)
+        }
+        reparam_alpha <- solve(a = solve_A, b = est_alpha)
+        est_coef_prev <- c(reparam_alpha, fit$beta[-(1:J_0)])
+        
         est_coef <- c()
         for(idx in 1:length(group)) {
           est_coef <- c(est_coef, est_coef_prev[order(group) == idx])
