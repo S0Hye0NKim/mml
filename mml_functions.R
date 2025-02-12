@@ -95,7 +95,7 @@ calc_design_mat <- function(Data, U.k_ref, W.k_ref) {
 
 
 # Estimate the coefficient vector using mm algorithm (with group lasso)
-est_mml_MM <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lambda, p, adaptive = FALSE, weight) {
+est_mml_MM <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lambda, p, adaptive = FALSE, weight, group) {
   # Setting
   n <- nrow(Y); K <- ncol(Y);
   J_k_vec <- Y %>% apply(2, unique) %>% lapply(FUN = function(x) x %>% length) %>% unlist
@@ -143,6 +143,9 @@ est_mml_MM <- function(max_iter, Z_list_0, Z_tilde_list_0, X_tilde_stack, Y, lam
     } else {
       if(adaptive == TRUE & missing(weight)) {
         stop("weight argument is necessary for adaptive group lasso")
+      }
+      if(missing(group)) {
+        group <- c(rep(1, J_0 + S_0), rep(1:p, J_0 + S_0) + 1)
       }
       if(missing(weight)) {
         weight <- table(group) %>% as.vector() %>% sqrt
