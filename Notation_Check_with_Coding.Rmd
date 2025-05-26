@@ -328,22 +328,3 @@ D <- kronecker(UQWR, diag(p))
 lapply(seq_len(nrow(D)), function(i) D[i, ] %>% as.logical %>% which %>% theta_tilde_nm[.])
 ```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
